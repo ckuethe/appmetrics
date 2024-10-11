@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# coding: utf-8
+# vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4 syn=python
 # Author: Chris Kuethe <chris.kuethe@gmail.com> , https://github.com/ckuethe/radiacode-tools
 # SPDX-License-Identifier: MIT
 
@@ -17,10 +19,10 @@ import sys
 from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from json import dumps as jdumps
-from os import getpid
+from os import getpgrp, getppid, killpg
 from threading import Lock, Thread
 from time import monotonic, process_time, time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 Number = Union[int, float]
 
@@ -63,8 +65,6 @@ class AppMetrics:
     """
 
     _mtypes: List[str] = [C, F, G]
-    _stub = False
-    am_mutex: Lock = Lock()
 
     def __init__(self, port: int = 8274, local_only: bool = True, appname: str = "", stub=False):
         """
@@ -73,10 +73,12 @@ class AppMetrics:
         appname: identificaton string for metrics
         stub: create a dummy that doesn't do anything, but can at least be used for prototyping
         """
+        self._stub = False
         if stub:
             self._stub = stub
             return
-        self._stats: Dict[str, Any] = {P: {"pid": getpid(), "appname": appname}, C: {}, F: {}, G: {}}
+        self.am_mutex: Lock = Lock()
+        self._stats: Dict[str, Any] = {P: {"pid": getppid(), "appname": appname}, C: {}, F: {}, G: {}}
         self._init_real_time = monotonic()
         self._wall_time = time()
         self._init_proc_time = process_time()
@@ -163,6 +165,10 @@ class AppMetricsBaseReqHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", len(encoded))
         self.end_headers()
         self.wfile.write(encoded)
+        self.wfile.flush()
+
+        if self.path.startswith("/quitquitquit"):
+            killpg(getpgrp(), 15)
 
     def log_message(self, format: str, *args: Any) -> None:
         "Ingentional log suppression"
@@ -170,8 +176,6 @@ class AppMetricsBaseReqHandler(BaseHTTPRequestHandler):
 
 
 class AppMetricsServer:
-    _server_thread: Optional[Thread] = None
-
     def __init__(self, app_metrics: AppMetrics, port: int = 8274, local_only: bool = True, appname: str = ""):
         address = "localhost" if local_only else "0.0.0.0"
         self._server_thread = Thread(
