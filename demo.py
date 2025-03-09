@@ -7,7 +7,7 @@ import time
 
 from appmetrics import AppMetrics
 
-ams = AppMetrics(appname=os.path.realpath(__file__))
+ams = AppMetrics(appname=os.path.realpath(__file__), safe=True)
 
 
 def read_cputemp(cpu: int) -> float:
